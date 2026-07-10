@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pitchside — Player Injury Risk Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0F1B16; --panel:#16231C; --card:#1C2C22; --card-2:#213326; --line:#2C3D31;
+    --chalk:#EFEBE0; --muted:#93A69A; --muted-2:#6C7E71;
+    --turf:#4FA664; --turf-dark:#356B45; --turf-glow:#5FCC7D;
+    --gold:#E8C468; --amber:#D9A441; --clay:#C1503D; --clay-dark:#8E3527;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at top left, rgba(79,166,100,0.08), transparent 45%),
+      radial-gradient(ellipse at bottom right, rgba(232,196,104,0.05), transparent 50%),
+      var(--bg);
+    color:var(--chalk); font-family:'Inter',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:var(--turf); color:#0F1B16; }
+  a{color:inherit;}
+  .shell{ display:flex; min-height:100vh; }
+  .sidebar{ width:230px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:26px 16px; position:sticky; top:0; height:100vh; }
+  .brand{ padding:0 8px 22px 8px; border-bottom:1px solid var(--line); margin-bottom:18px;}
+  .brand-mark{ font-family:'Oswald',sans-serif; font-weight:700; font-size:22px; letter-spacing:0.5px; color:var(--chalk); display:flex; align-items:baseline; gap:6px; }
+  .brand-mark span{ color:var(--turf-glow); }
+  .brand-sub{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted-2); letter-spacing:1.2px; margin-top:4px; text-transform:uppercase;}
+  .navlist{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; flex:1; }
+  .navitem{ display:flex; align-items:center; gap:12px; padding:11px 10px; border-radius:8px; cursor:pointer; color:var(--muted); font-size:14px; font-weight:500; transition:background .15s ease, color .15s ease; border:1px solid transparent; }
+  .navitem:hover{ background:var(--card); color:var(--chalk); }
+  .navitem.active{ background:var(--card-2); color:var(--chalk); border-color:var(--line); }
+  .navitem.active .navnum{ background:var(--turf); color:#0F1B16; }
+  .navnum{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; width:22px; height:22px; border-radius:5px; background:var(--card); color:var(--muted-2); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .sidebar-foot{ margin-top:16px; padding:12px 10px; border-top:1px solid var(--line); font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted-2); line-height:1.6; }
+  .dot-live{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--turf-glow); margin-right:6px; box-shadow:0 0 6px var(--turf-glow); }
+  .dot-live.off{ background:var(--clay); box-shadow:0 0 6px var(--clay); }
+  .main{ flex:1; min-width:0; padding:34px 40px 60px 40px; }
+  .page{ display:none; animation:fadein .25s ease; }
+  .page.active{ display:block; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  .page-head{ margin-bottom:26px; }
+  .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--turf-glow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px; }
+  h1.page-title{ font-family:'Oswald',sans-serif; font-size:32px; font-weight:600; margin:0 0 8px 0; color:var(--chalk); }
+  .page-desc{ color:var(--muted); font-size:14.5px; max-width:640px; line-height:1.6; }
+  .grid{ display:grid; gap:16px; }
+  .grid-4{ grid-template-columns:repeat(4,1fr); }
+  .grid-2{ grid-template-columns:1.3fr 1fr; }
+  @media(max-width:1100px){ .grid-4{grid-template-columns:repeat(2,1fr);} .grid-2{grid-template-columns:1fr;} }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; }
+  .card-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+  .card-title{ font-family:'Oswald',sans-serif; font-size:16px; font-weight:600; letter-spacing:0.2px; }
+  .card-tag{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted-2); }
+  .stat-card{ padding:18px 20px; }
+  .stat-label{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted-2); letter-spacing:1px; text-transform:uppercase; }
+  .stat-value{ font-family:'Oswald',sans-serif; font-size:34px; font-weight:600; margin-top:6px; color:var(--chalk); }
+  .stat-value.turf{ color:var(--turf-glow); } .stat-value.gold{ color:var(--gold); } .stat-value.clay{ color:var(--clay); }
+  .stat-foot{ font-size:12px; color:var(--muted); margin-top:6px; }
+  section.block{ margin-bottom:22px; }
+  .risk-legend{ display:flex; gap:18px; margin-top:12px; flex-wrap:wrap; }
+  .legend-item{ display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); font-family:'IBM Plex Mono',monospace; }
+  .legend-dot{ width:9px; height:9px; border-radius:50%; }
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.6px; padding:8px 10px; border-bottom:1px solid var(--line); font-weight:600; cursor:pointer; user-select:none; white-space:nowrap; }
+  th:hover{ color:var(--chalk); }
+  td{ padding:9px 10px; border-bottom:1px solid var(--line); color:var(--chalk); white-space:nowrap; }
+  tr.row-player{ cursor:pointer; transition:background .12s ease; }
+  tr.row-player:hover{ background:var(--card-2); }
+  tr.row-player.selected{ background:var(--card-2); box-shadow:inset 3px 0 0 var(--turf); }
+  .badge{ display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:20px; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; }
+  .badge.low{ background:rgba(79,166,100,0.15); color:var(--turf-glow); }
+  .badge.med{ background:rgba(217,164,65,0.15); color:var(--amber); }
+  .badge.high{ background:rgba(193,80,61,0.15); color:var(--clay); }
+  .badge-dot{ width:6px; height:6px; border-radius:50%; }
+  .search-row{ display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  input[type=text], select, input[type=number]{ background:var(--panel); border:1px solid var(--line); color:var(--chalk); padding:9px 12px; border-radius:7px; font-family:'Inter',sans-serif; font-size:13px; }
+  input[type=text]:focus, select:focus, input[type=number]:focus{ outline:none; border-color:var(--turf); }
+  input[type=range]{ width:100%; accent-color:var(--turf); }
+  .split{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:16px; }
+  @media(max-width:1100px){ .split{grid-template-columns:1fr;} }
+  .factor-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:12.5px; }
+  .factor-label{ width:150px; color:var(--muted); flex-shrink:0; }
+  .factor-bar-bg{ flex:1; height:8px; background:var(--panel); border-radius:5px; overflow:hidden; }
+  .factor-bar{ height:100%; border-radius:5px; }
+  .factor-val{ width:44px; text-align:right; font-family:'IBM Plex Mono',monospace; color:var(--muted); font-size:11.5px; }
+  .empty-state{ color:var(--muted); font-size:13px; padding:30px 0; text-align:center; }
+  .callout{ border:1px dashed var(--line); border-radius:10px; padding:16px 18px; font-size:13px; color:var(--muted); line-height:1.6; }
+  .callout b{ color:var(--chalk); }
+  .callout.warn{ border-color:rgba(217,164,65,0.4); background:rgba(217,164,65,0.05); }
+  .cm-grid{ display:grid; grid-template-columns:auto 1fr 1fr; gap:6px; max-width:340px; }
+  .cm-cell{ padding:16px; text-align:center; border-radius:8px; font-family:'IBM Plex Mono',monospace; }
+  .cm-cell .n{ font-size:22px; font-weight:700; display:block; }
+  .cm-cell .l{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+  .cm-head{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted-2); text-align:center; padding:4px; text-transform:uppercase;}
+  .gantt-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:12px; }
+  .gantt-label{ width:170px; color:var(--muted); flex-shrink:0; font-family:'IBM Plex Mono',monospace; font-size:11px; overflow:hidden; text-overflow:ellipsis;}
+  .gantt-track{ flex:1; height:14px; background:var(--panel); border-radius:4px; position:relative; }
+  .gantt-bar{ position:absolute; top:0; height:100%; border-radius:4px; background:var(--clay); }
+  .gantt-days{ width:60px; text-align:right; font-family:'IBM Plex Mono',monospace; color:var(--muted-2); font-size:11px;}
+  .btn{ background:var(--turf); color:#0F1B16; border:none; padding:11px 20px; border-radius:8px; font-family:'Oswald',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.3px; cursor:pointer; transition:background .15s ease, transform .1s ease; }
+  .btn:hover{ background:var(--turf-glow); }
+  .btn:active{ transform:scale(0.98); }
+  .btn:disabled{ background:var(--card-2); color:var(--muted-2); cursor:not-allowed; }
+  .btn.ghost{ background:transparent; border:1px solid var(--line); color:var(--chalk); }
+  .btn.ghost:hover{ background:var(--card-2); }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 18px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
+  .field label .fval{ color:var(--gold); }
+  .gauge-wrap{ display:flex; flex-direction:column; align-items:center; padding:10px 0 4px 0; }
+  .gauge-val{ font-family:'Oswald',sans-serif; font-size:44px; font-weight:700; margin-top:-64px; }
+  .gauge-sub{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:4px;}
+  .status-line{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); margin-top:10px; min-height:18px;}
+  .footer-note{ margin-top:40px; padding-top:18px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted-2); line-height:1.7; }
+  .mobile-tabs{ display:none; }
+  @media(max-width:860px){
+    .sidebar{ display:none; }
+    .mobile-tabs{ display:flex; overflow-x:auto; gap:8px; padding:14px 16px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+    .mobile-tabs .navitem{ white-space:nowrap; }
+    .main{ padding:20px 16px 50px 16px; }
+    .form-grid{ grid-template-columns:1fr; }
+  }
+  .conn-banner{
+    display:none; background:var(--clay-dark); color:#fff; font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px; padding:10px 20px; text-align:center;
+  }
+  .conn-banner.show{ display:block; }
+</style>
+</head>
+<body>
+
+<div class="conn-banner" id="connBanner">
+  Can't reach the backend API. Start it with <code>python app.py</code> in the backend folder, then reload this page.
+</div>
+<div class="mobile-tabs" id="mobileTabs"></div>
+
+<div class="shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">PITCH<span>SIDE</span></div>
+      <div class="brand-sub"><span class="dot-live" id="connDot"></span><span id="connLabel">connecting…</span></div>
+    </div>
+    <ul class="navlist" id="navList"></ul>
+    <div class="sidebar-foot">
+      <div>Real models · real data.csv</div>
+      <div style="margin-top:6px;">Best model: <span id="bestModelTag">—</span></div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ================= PAGE 1: OVERVIEW ================= -->
+    <div class="page active" id="page-overview">
+      <div class="page-head">
+        <div class="eyebrow">Squad 01 · Overview</div>
+        <h1 class="page-title">Season Risk Overview</h1>
+        <p class="page-desc">Live stats computed from <code>data.csv</code> by the Flask backend — nothing on this page is hand-typed or simulated.</p>
+      </div>
+
+      <section class="block grid grid-4">
+        <div class="card stat-card">
+          <div class="stat-label">Players in dataset</div>
+          <div class="stat-value" id="statPlayers">—</div>
+          <div class="stat-foot" id="statPositions">—</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Injury rate (season)</div>
+          <div class="stat-value clay" id="statInjuryRate">—</div>
+          <div class="stat-foot">Share of squad with Injury_Next_Season = 1</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Avg. past injuries</div>
+          <div class="stat-value turf" id="statPastInj">—</div>
+          <div class="stat-foot">Previous_Injury_Count, squad average</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Avg. training load</div>
+          <div class="stat-value gold" id="statTraining">—</div>
+          <div class="stat-foot">Training hours / week, squad average</div>
+        </div>
+      </section>
+
+      <section class="block split">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Test-Set Risk Map</div>
+            <div class="card-tag">by position · real predictions</div>
+          </div>
+          <div class="pitch-wrap" id="pitchWrap"><div class="empty-state">Loading players…</div></div>
+          <div class="risk-legend">
+            <div class="legend-item"><span class="legend-dot" style="background:var(--turf-glow);"></span>Low risk</div>
+            <div class="legend-item"><span class="legend-dot" style="background:var(--amber);"></span>Moderate</div>
+            <div class="legend-item"><span class="legend-dot" style="background:var(--clay);"></span>High risk</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Top Feature Importance</div>
+            <div class="card-tag">Random Forest</div>
+          </div>
+          <canvas id="overviewImportanceChart" height="230"></canvas>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Why ACWR &amp; workload matter</div>
+            <div class="card-tag">from the literature review</div>
+          </div>
+          <p style="font-size:13px; color:var(--muted); line-height:1.7; margin:0;">
+            The Acute:Chronic Workload Ratio (ACWR) compares a player's recent training/match load against their longer-term average — a sudden spike well above what the body is conditioned for is a well-established early warning sign in injury-forecasting research. This dashboard's <b>Training_Hours_Per_Week</b> and <b>Matches_Played_Past_Season</b> fields are the closest workload proxies available in <code>data.csv</code>, and both show up in the Random Forest's feature importance ranking above.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= PAGE 2: PLAYER EXPLORER ================= -->
+    <div class="page" id="page-players">
+      <div class="page-head">
+        <div class="eyebrow">Squad 02 · Explorer</div>
+        <h1 class="page-title">Player Risk Explorer</h1>
+        <p class="page-desc">Every row here is a real player from the held-out test set, with a real predicted risk score from the best-performing model (<span id="bestModelInline">—</span>).</p>
+      </div>
+
+      <div class="search-row">
+        <input type="text" id="playerSearch" placeholder="Search position…" style="min-width:220px;">
+        <select id="posFilter">
+          <option value="all">All positions</option>
+          <option value="Goalkeeper">Goalkeeper</option>
+          <option value="Defender">Defender</option>
+          <option value="Midfielder">Midfielder</option>
+          <option value="Forward">Forward</option>
+        </select>
+        <select id="riskFilter">
+          <option value="all">All risk levels</option>
+          <option value="low">Low</option>
+          <option value="med">Moderate</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+
+      <div class="split">
+        <div class="card">
+          <div class="table-wrap">
+            <table id="playerTable">
+              <thead>
+                <tr>
+                  <th data-key="id">ID</th>
+                  <th data-key="position_label">Pos</th>
+                  <th data-key="Age">Age</th>
+                  <th data-key="Previous_Injury_Count">Past Inj.</th>
+                  <th data-key="Training_Hours_Per_Week">Load (h/wk)</th>
+                  <th data-key="predicted_risk">Risk</th>
+                </tr>
+              </thead>
+              <tbody id="playerTableBody"><tr><td colspan="6"><div class="empty-state">Loading…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" id="playerDetailCard">
+          <div class="empty-state" id="playerDetailEmpty">Select a player from the table to see their risk breakdown.</div>
+          <div id="playerDetailContent" style="display:none;">
+            <div class="card-head">
+              <div class="card-title" id="detailName">—</div>
+              <span class="badge" id="detailBadge"><span class="badge-dot"></span>—</span>
+            </div>
+            <canvas id="radarChart" height="200"></canvas>
+            <div class="card-tag" style="margin-top:6px;">Normalized 0–10 scale, from real feature values</div>
+            <div style="margin-top:18px;">
+              <div class="card-tag" style="margin-bottom:10px;">Top contributing factors (RF importance × deviation from squad average)</div>
+              <div id="factorList"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PAGE 3: MODEL COMPARISON ================= -->
+    <div class="page" id="page-models">
+      <div class="page-head">
+        <div class="eyebrow">Squad 03 · Behind the Model</div>
+        <h1 class="page-title">Model Comparison</h1>
+        <p class="page-desc">Logistic Regression, Random Forest, and a Keras MLP — all trained on the same split, evaluated the same way, real numbers from <code>train_models.py</code>.</p>
+      </div>
+
+      <section class="block grid grid-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Accuracy · AUC · F1</div>
+            <div class="card-tag">held-out test set</div>
+          </div>
+          <canvas id="modelBarChart" height="220"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Confusion Matrix</div>
+            <div class="card-tag" id="cmModelLabel">best model</div>
+          </div>
+          <div class="cm-grid">
+            <div></div>
+            <div class="cm-head">Pred. No Injury</div>
+            <div class="cm-head">Pred. Injury</div>
+            <div class="cm-head" style="writing-mode:vertical-rl; text-orientation:mixed;">Actual No Inj.</div>
+            <div class="cm-cell" style="background:rgba(79,166,100,0.18); color:var(--turf-glow);"><span class="n" id="cmTN">—</span><span class="l">True Neg.</span></div>
+            <div class="cm-cell" style="background:rgba(193,80,61,0.12); color:var(--clay);"><span class="n" id="cmFP">—</span><span class="l">False Pos.</span></div>
+            <div class="cm-head" style="writing-mode:vertical-rl; text-orientation:mixed;">Actual Injury</div>
+            <div class="cm-cell" style="background:rgba(193,80,61,0.12); color:var(--clay);"><span class="n" id="cmFN">—</span><span class="l">False Neg.</span></div>
+            <div class="cm-cell" style="background:rgba(79,166,100,0.18); color:var(--turf-glow);"><span class="n" id="cmTP">—</span><span class="l">True Pos.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block grid grid-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Feature Importance</div>
+            <div class="card-tag">Random Forest, all features</div>
+          </div>
+          <canvas id="importanceChart" height="240"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Limitations</div>
+            <div class="card-tag">read before trusting these numbers</div>
+          </div>
+          <div class="callout warn">
+            <b>No shared key between datasets:</b> <code>data.csv</code> (anonymous player attributes) and <code>player_injuries_impact.csv</code> (named injury case history) don't share a player ID, so risk predictions here are trained only on <code>data.csv</code> — the Injury Insights page uses the injuries file separately and honestly, not merged in.<br><br>
+            <b>High accuracy:</b> this dataset's target looks cleanly separable, which is why all three models score well — treat these numbers as a demonstration of the pipeline, not a validated real-world risk model.<br><br>
+            <b>Small dataset:</b> 800 rows is workable for Logistic Regression / Random Forest but modest for a neural net.
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= PAGE 4: INJURY INSIGHTS ================= -->
+    <div class="page" id="page-injuries">
+      <div class="page-head">
+        <div class="eyebrow">Squad 04 · Injury Insights</div>
+        <h1 class="page-title">Injury Insights</h1>
+        <p class="page-desc">Real numbers from <code>player_injuries_impact.csv</code> — injury types, before/after performance, and return-to-play duration.</p>
+      </div>
+
+      <section class="block grid grid-4">
+        <div class="card stat-card">
+          <div class="stat-label">Injury cases logged</div>
+          <div class="stat-value" id="injStatTotal">—</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Avg. days out</div>
+          <div class="stat-value clay" id="injStatDays">—</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Rating before → after</div>
+          <div class="stat-value gold" id="injStatRating">—</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">GD before → after</div>
+          <div class="stat-value turf" id="injStatGd">—</div>
+        </div>
+      </section>
+
+      <section class="block grid grid-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Injury Type Distribution</div>
+            <div class="card-tag">top types, normalized casing</div>
+          </div>
+          <canvas id="injuryTypeChart" height="220"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Rating &amp; GD: Before vs After</div>
+            <div class="card-tag">all-case average</div>
+          </div>
+          <canvas id="beforeAfterAvgChart" height="220"></canvas>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Longest Return-to-Play Cases</div>
+            <div class="card-tag">days out, top 10</div>
+          </div>
+          <div id="ganttWrap"><div class="empty-state">Loading…</div></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= PAGE 5: LIVE DEMO ================= -->
+    <div class="page" id="page-demo">
+      <div class="page-head">
+        <div class="eyebrow">Squad 05 · Live Demo</div>
+        <h1 class="page-title">Try It Live</h1>
+        <p class="page-desc">Both panels below call the real Flask backend — training actually retrains a model on the real split, and the prediction is a real forward pass through a saved model.</p>
+      </div>
+
+      <section class="block grid grid-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Train a Model</div>
+            <div class="card-tag">POST /api/train</div>
+          </div>
+          <div class="form-grid">
+            <div class="field" style="grid-column:1/-1;">
+              <label>Architecture</label>
+              <select id="archSelect">
+                <option value="mlp">Neural Network (MLP)</option>
+                <option value="rf">Random Forest</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Epochs / steps <span class="fval" id="epochsVal">20</span></label>
+              <input type="range" id="epochsSlider" min="5" max="50" value="20">
+            </div>
+            <div class="field">
+              <label>Batch size (MLP only)</label>
+              <select id="batchSelect">
+                <option>16</option><option selected>32</option><option>64</option><option>128</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn" id="trainBtn">▶ Train Model</button>
+            <button class="btn ghost" id="resetTrainBtn" style="margin-left:8px;">Reset</button>
+          </div>
+          <div class="status-line" id="trainStatus">Ready.</div>
+          <canvas id="trainChart" height="180" style="margin-top:14px;"></canvas>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Predict My Risk</div>
+            <div class="card-tag">POST /api/predict</div>
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label>Age <span class="fval" id="ageVal">24</span></label>
+              <input type="range" id="ageSlider" min="17" max="38" value="24">
+            </div>
+            <div class="field">
+              <label>Position</label>
+              <select id="posSelect">
+                <option>Midfielder</option><option>Defender</option><option>Forward</option><option>Goalkeeper</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Training hours/week <span class="fval" id="trainHoursVal">10</span></label>
+              <input type="range" id="trainHoursSlider" min="2" max="20" value="10" step="0.5">
+            </div>
+            <div class="field">
+              <label>Sprint speed 10m (s, lower=faster) <span class="fval" id="speedVal">6.0</span></label>
+              <input type="range" id="speedSlider" min="5" max="7" value="6" step="0.05">
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>Past injuries (career) <span class="fval" id="pastInjVal">1</span></label>
+              <input type="range" id="pastInjSlider" min="0" max="6" value="1">
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn" id="predictBtn">Predict Risk</button>
+          </div>
+          <div class="gauge-wrap">
+            <canvas id="gaugeChart" width="220" height="140"></canvas>
+            <div class="gauge-val" id="gaugeVal" style="color:var(--turf-glow);">—</div>
+            <div class="gauge-sub" id="gaugeSub">awaiting input</div>
+          </div>
+          <div id="predictFactors" style="margin-top:6px;"></div>
+        </div>
+      </section>
+
+      <div class="footer-note">
+        <b style="color:var(--muted);">How this is wired up:</b> this page is served by Flask itself (<code>app.py</code>) directly from the <code>frontend/</code> folder, so every fetch below is a same-origin call to <code>/api/...</code> — no separate server or CORS config needed once you follow the README. Unlisted fields in the predict form (height, weight, BMI, etc.) are filled in with squad averages computed at training time (<code>feature_defaults.json</code>).
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+Chart.defaults.color = '#93A69A';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.borderColor = '#2C3D31';
+
+const COLORS = {
+  turf:'#4FA664', turfGlow:'#5FCC7D', turfDark:'#356B45',
+  gold:'#E8C468', amber:'#D9A441', clay:'#C1503D', clayDark:'#8E3527',
+  chalk:'#EFEBE0', muted:'#93A69A', panel:'#16231C', card:'#1C2C22', line:'#2C3D31'
+};
+
+const API = ""; // same-origin; change to e.g. "http://localhost:5000" if you split hosting
+
+/* ---------------------------------------------------------
+   NAVIGATION
+--------------------------------------------------------- */
+const PAGES = [
+  {id:'overview', label:'Overview', num:'OV'},
+  {id:'players', label:'Player Explorer', num:'01'},
+  {id:'models', label:'Model Comparison', num:'02'},
+  {id:'injuries', label:'Injury Insights', num:'03'},
+  {id:'demo', label:'Live Demo', num:'04'}
+];
+function buildNav(container){
+  container.innerHTML = '';
+  PAGES.forEach(p=>{
+    const el = document.createElement('div');
+    el.className = 'navitem' + (p.id==='overview'?' active':'');
+    el.dataset.page = p.id;
+    el.innerHTML = `<span class="navnum">${p.num}</span><span>${p.label}</span>`;
+    el.addEventListener('click', ()=>switchPage(p.id));
+    container.appendChild(el);
+  });
+}
+buildNav(document.getElementById('navList'));
+buildNav(document.getElementById('mobileTabs'));
+function switchPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active', n.dataset.page===id));
+}
+
+/* ---------------------------------------------------------
+   FETCH HELPERS
+--------------------------------------------------------- */
+async function getJSON(path){
+  const res = await fetch(API + path);
+  if(!res.ok) throw new Error(path + ' -> ' + res.status);
+  return res.json();
+}
+async function postJSON(path, body){
+  const res = await fetch(API + path, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error(path + ' -> ' + res.status);
+  return res.json();
+}
+function setConnected(ok){
+  document.getElementById('connBanner').classList.toggle('show', !ok);
+  document.getElementById('connDot').classList.toggle('off', !ok);
+  document.getElementById('connLabel').textContent = ok ? 'backend connected' : 'backend offline';
+}
+
+function riskTier(r){ return r>=60?'high': r>=35?'med':'low'; }
+function riskColor(r){ const t=riskTier(r); return t==='high'?COLORS.clay:t==='med'?COLORS.amber:COLORS.turfGlow; }
+function riskLabel(r){ const t=riskTier(r); return t==='high'?'High':t==='med'?'Moderate':'Low'; }
+
+let PLAYERS = [];
+let METRICS = null;
+
+/* ---------------------------------------------------------
+   OVERVIEW PAGE
+--------------------------------------------------------- */
+function buildPitch(players){
+  const w=520,h=300;
+  const posY = {Goalkeeper:h-24, Defender:h*0.72, Midfielder:h*0.46, Forward:h*0.16};
+  let dots='';
+  const laneCounts = {};
+  players.forEach(p=>{
+    const pos = p.position_label in posY ? p.position_label : 'Midfielder';
+    laneCounts[pos] = (laneCounts[pos]||0)+1;
+    const idx = laneCounts[pos];
+    const laneTotal = players.filter(pp=>pp.position_label===pos).length || 1;
+    const x = (w/(laneTotal+1))*idx;
+    const y = posY[pos] + (Math.random()*16-8);
+    const c = riskColor(p.predicted_risk);
+    dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6.5" fill="${c}" fill-opacity="0.85" stroke="#0F1B16" stroke-width="1.5"><title>${pos} — ${riskLabel(p.predicted_risk)} risk (${p.predicted_risk}%)</title></circle>`;
+  });
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:auto; display:block;">
+    <rect x="0" y="0" width="${w}" height="${h}" fill="#132119" rx="10"/>
+    <rect x="10" y="10" width="${w-20}" height="${h-20}" fill="none" stroke="#2C3D31" stroke-width="2" rx="6"/>
+    <line x1="10" y1="${h/2}" x2="${w-10}" y2="${h/2}" stroke="#2C3D31" stroke-width="1.5"/>
+    <circle cx="${w/2}" cy="${h/2}" r="38" fill="none" stroke="#2C3D31" stroke-width="1.5"/>
+    <rect x="${w/2-70}" y="10" width="140" height="46" fill="none" stroke="#2C3D31" stroke-width="1.5"/>
+    <rect x="${w/2-70}" y="${h-56}" width="140" height="46" fill="none" stroke="#2C3D31" stroke-width="1.5"/>
+    ${dots}
+  </svg>`;
+}
+
+async function loadOverview(){
+  const ov = await getJSON('/api/overview');
+  document.getElementById('statPlayers').textContent = ov.n_players;
+  const posStr = Object.entries(ov.position_counts).map(([k,v])=>`${k} ${v}`).join(' · ');
+  document.getElementById('statPositions').textContent = posStr;
+  document.getElementById('statInjuryRate').textContent = ov.injury_rate_pct + '%';
+  document.getElementById('statPastInj').textContent = ov.avg_previous_injuries;
+  document.getElementById('statTraining').textContent = ov.avg_training_hours + 'h';
+  document.getElementById('bestModelTag').textContent = labelForModel(ov.best_model);
+  document.getElementById('bestModelInline').textContent = labelForModel(ov.best_model);
+}
+function labelForModel(key){
+  return {logreg:'Logistic Regression', rf:'Random Forest', mlp:'Neural Network (MLP)'}[key] || key;
+}
+
+let overviewImportanceChartInst=null;
+function renderOverviewImportance(metrics){
+  const top = metrics.feature_importance.slice(0,7);
+  if(overviewImportanceChartInst) overviewImportanceChartInst.destroy();
+  overviewImportanceChartInst = new Chart(document.getElementById('overviewImportanceChart'), {
+    type:'bar',
+    data:{ labels:top.map(f=>f.feature), datasets:[{ data:top.map(f=>f.importance), backgroundColor:COLORS.turfGlow }] },
+    options:{ indexAxis:'y', scales:{ x:{grid:{color:COLORS.line}}, y:{grid:{display:false}} }, plugins:{legend:{display:false}} }
+  });
+}
+
+/* ---------------------------------------------------------
+   PLAYER EXPLORER PAGE
+--------------------------------------------------------- */
+let sortKey='predicted_risk', sortDir=-1, selectedPlayerId=null;
+let radarChartInst=null;
+
+function filteredPlayers(){
+  const q = document.getElementById('playerSearch').value.toLowerCase();
+  const posF = document.getElementById('posFilter').value;
+  const riskF = document.getElementById('riskFilter').value;
+  return PLAYERS.filter(p=>{
+    if(q && !p.position_label.toLowerCase().includes(q)) return false;
+    if(posF!=='all' && p.position_label!==posF) return false;
+    if(riskF!=='all' && riskTier(p.predicted_risk)!==riskF) return false;
+    return true;
+  }).sort((a,b)=> (a[sortKey]>b[sortKey]?1:-1)*sortDir);
+}
+
+function renderPlayerTable(){
+  const tbody = document.getElementById('playerTableBody');
+  const rows = filteredPlayers();
+  if(rows.length===0){
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">No players match those filters.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(p=>`
+    <tr class="row-player ${p.id===selectedPlayerId?'selected':''}" data-id="${p.id}">
+      <td>#${p.id}</td>
+      <td>${p.position_label}</td>
+      <td>${Math.round(p.Age)}</td>
+      <td>${p.Previous_Injury_Count}</td>
+      <td>${p.Training_Hours_Per_Week.toFixed(1)}</td>
+      <td><span class="badge ${riskTier(p.predicted_risk)}"><span class="badge-dot" style="background:${riskColor(p.predicted_risk)};"></span>${p.predicted_risk}%</span></td>
+    </tr>
+  `).join('');
+  tbody.querySelectorAll('tr.row-player').forEach(tr=>{
+    tr.addEventListener('click', ()=>{ selectedPlayerId = +tr.dataset.id; renderPlayerTable(); showPlayerDetail(selectedPlayerId); });
+  });
+}
+document.getElementById('playerSearch').addEventListener('input', renderPlayerTable);
+document.getElementById('posFilter').addEventListener('change', renderPlayerTable);
+document.getElementById('riskFilter').addEventListener('change', renderPlayerTable);
+document.querySelectorAll('#playerTable th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    if(sortKey===key){ sortDir*=-1; } else { sortKey=key; sortDir = key==='position_label' ? 1 : -1; }
+    renderPlayerTable();
+  });
+});
+
+async function showPlayerDetail(id){
+  const detail = await getJSON('/api/player/'+id);
+  document.getElementById('playerDetailEmpty').style.display='none';
+  document.getElementById('playerDetailContent').style.display='block';
+  document.getElementById('detailName').textContent = `Player #${detail.id} · ${detail.position_label}`;
+  const badge = document.getElementById('detailBadge');
+  badge.className = `badge ${riskTier(detail.predicted_risk)}`;
+  badge.innerHTML = `<span class="badge-dot" style="background:${riskColor(detail.predicted_risk)};"></span>${detail.predicted_risk}% risk`;
+
+  const knee = detail.Knee_Strength_Score/10;
+  const ham = detail.Hamstring_Flexibility/10;
+  const bal = detail.Balance_Test_Score/10;
+  const agi = detail.Agility_Score/10;
+  const speed = Math.max(0, Math.min(10, (7.5 - detail.Sprint_Speed_10m_s) * 5));
+  const sleep = Math.min(10, detail.Sleep_Hours_Per_Night);
+
+  const radarData = {
+    labels:['Knee Strength','Hamstring Flex.','Balance','Agility','Sprint Speed','Sleep'],
+    datasets:[{ label:'Player #'+detail.id, data:[knee,ham,bal,agi,speed,sleep],
+      backgroundColor:'rgba(79,166,100,0.25)', borderColor:COLORS.turfGlow, pointBackgroundColor:COLORS.turfGlow }]
+  };
+  if(radarChartInst) radarChartInst.destroy();
+  radarChartInst = new Chart(document.getElementById('radarChart'), {
+    type:'radar', data:radarData,
+    options:{ scales:{ r:{ min:0, max:10, ticks:{display:false}, grid:{color:COLORS.line}, angleLines:{color:COLORS.line}, pointLabels:{color:COLORS.muted, font:{size:11}} } },
+      plugins:{ legend:{display:false} } }
+  });
+
+  const maxContribution = Math.max(...detail.top_factors.map(f=>f.contribution), 0.0001);
+  document.getElementById('factorList').innerHTML = detail.top_factors.map(f=>`
+    <div class="factor-row">
+      <div class="factor-label">${f.feature}</div>
+      <div class="factor-bar-bg"><div class="factor-bar" style="width:${(f.contribution/maxContribution*100).toFixed(0)}%; background:${riskColor(detail.predicted_risk)};"></div></div>
+      <div class="factor-val">${f.contribution.toFixed(3)}</div>
+    </div>
+  `).join('');
+}
+
+/* ---------------------------------------------------------
+   MODEL COMPARISON PAGE
+--------------------------------------------------------- */
+function renderModelComparison(metrics){
+  const keys = ['logreg','rf','mlp'];
+  const labels = keys.map(labelForModel);
+  new Chart(document.getElementById('modelBarChart'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Accuracy', data:keys.map(k=>metrics.models[k].accuracy), backgroundColor:COLORS.turf},
+      {label:'AUC', data:keys.map(k=>metrics.models[k].auc), backgroundColor:COLORS.gold},
+      {label:'F1', data:keys.map(k=>metrics.models[k].f1), backgroundColor:COLORS.clay}
+    ]},
+    options:{ scales:{ y:{min:0,max:1, grid:{color:COLORS.line}}, x:{grid:{display:false}} }, plugins:{legend:{labels:{color:COLORS.muted}}} }
+  });
+
+  const best = metrics.models[metrics.best_model];
+  document.getElementById('cmModelLabel').textContent = labelForModel(metrics.best_model) + ' (best AUC)';
+  document.getElementById('cmTN').textContent = best.confusion_matrix.tn;
+  document.getElementById('cmFP').textContent = best.confusion_matrix.fp;
+  document.getElementById('cmFN').textContent = best.confusion_matrix.fn;
+  document.getElementById('cmTP').textContent = best.confusion_matrix.tp;
+
+  new Chart(document.getElementById('importanceChart'), {
+    type:'bar',
+    data:{ labels:metrics.feature_importance.map(f=>f.feature), datasets:[{ data:metrics.feature_importance.map(f=>f.importance), backgroundColor:COLORS.turfGlow }] },
+    options:{ indexAxis:'y', scales:{ x:{grid:{color:COLORS.line}}, y:{grid:{display:false}} }, plugins:{legend:{display:false}} }
+  });
+}
+
+/* ---------------------------------------------------------
+   INJURY INSIGHTS PAGE
+--------------------------------------------------------- */
+async function loadInjuries(){
+  const inj = await getJSON('/api/injuries');
+  document.getElementById('injStatTotal').textContent = inj.total_cases;
+  document.getElementById('injStatDays').textContent = inj.avg_days_out + 'd';
+  document.getElementById('injStatRating').textContent = `${inj.avg_rating_before} → ${inj.avg_rating_after}`;
+  document.getElementById('injStatGd').textContent = `${inj.avg_gd_before} → ${inj.avg_gd_after}`;
+
+  new Chart(document.getElementById('injuryTypeChart'), {
+    type:'bar',
+    data:{ labels:Object.keys(inj.injury_type_counts), datasets:[{ data:Object.values(inj.injury_type_counts), backgroundColor:COLORS.amber }] },
+    options:{ indexAxis:'y', scales:{ x:{grid:{color:COLORS.line}}, y:{grid:{display:false}} }, plugins:{legend:{display:false}} }
+  });
+
+  new Chart(document.getElementById('beforeAfterAvgChart'), {
+    type:'bar',
+    data:{ labels:['Player Rating','Goal Difference (GD)'],
+      datasets:[
+        {label:'Before injury', data:[inj.avg_rating_before, inj.avg_gd_before], backgroundColor:COLORS.turf},
+        {label:'After return', data:[inj.avg_rating_after, inj.avg_gd_after], backgroundColor:COLORS.clay}
+      ]},
+    options:{ scales:{ y:{grid:{color:COLORS.line}}, x:{grid:{display:false}} }, plugins:{legend:{labels:{color:COLORS.muted}}} }
+  });
+
+  const maxDays = Math.max(...inj.longest_cases.map(c=>c.days_out));
+  document.getElementById('ganttWrap').innerHTML = inj.longest_cases.map(c=>`
+    <div class="gantt-row">
+      <div class="gantt-label">${c.Name}</div>
+      <div class="gantt-track"><div class="gantt-bar" style="width:${(c.days_out/maxDays*100).toFixed(0)}%; background:${COLORS.clay};"></div></div>
+      <div class="gantt-days">${Math.round(c.days_out)}d</div>
+    </div>
+  `).join('');
+}
+
+/* ---------------------------------------------------------
+   LIVE DEMO — TRAIN
+--------------------------------------------------------- */
+const epochsSlider = document.getElementById('epochsSlider');
+epochsSlider.addEventListener('input', ()=> document.getElementById('epochsVal').textContent = epochsSlider.value);
+
+let trainChart = new Chart(document.getElementById('trainChart'), {
+  type:'line',
+  data:{ labels:[], datasets:[
+    {label:'Train loss', data:[], borderColor:COLORS.clay, backgroundColor:'transparent', tension:0.3, pointRadius:0},
+    {label:'Val accuracy', data:[], borderColor:COLORS.turfGlow, backgroundColor:'transparent', tension:0.3, pointRadius:0, yAxisID:'y1'}
+  ]},
+  options:{ animation:false,
+    scales:{ y:{ min:0, max:1, grid:{color:COLORS.line}, title:{display:true,text:'loss',color:COLORS.muted} },
+      y1:{ min:0, max:1, position:'right', grid:{display:false}, title:{display:true,text:'accuracy',color:COLORS.muted} },
+      x:{ grid:{display:false} } },
+    plugins:{ legend:{labels:{color:COLORS.muted}} }
+  }
+});
+
+document.getElementById('trainBtn').addEventListener('click', async ()=>{
+  const architecture = document.getElementById('archSelect').value;
+  const epochs = +epochsSlider.value;
+  const batch_size = +document.getElementById('batchSelect').value;
+  const btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  document.getElementById('trainStatus').textContent = 'Training on the real split — this calls the backend and can take a few seconds…';
+  trainChart.data.labels = []; trainChart.data.datasets[0].data = []; trainChart.data.datasets[1].data = [];
+  trainChart.update();
+
+  try{
+    const result = await postJSON('/api/train', {architecture, epochs, batch_size});
+    const points = result.val_accuracy.length;
+    let i = 0;
+    const timer = setInterval(()=>{
+      i++;
+      trainChart.data.labels.push('E'+i);
+      if(result.loss) trainChart.data.datasets[0].data.push(result.loss[i-1]);
+      trainChart.data.datasets[1].data.push(result.val_accuracy[i-1]);
+      trainChart.update();
+      const lossTxt = result.loss ? `loss ${result.loss[i-1]}` : 'no loss metric (tree model)';
+      document.getElementById('trainStatus').textContent = `Step ${i}/${points} — ${lossTxt}, val acc ${(result.val_accuracy[i-1]*100).toFixed(1)}%`;
+      if(i>=points){
+        clearInterval(timer);
+        btn.disabled = false;
+        document.getElementById('trainStatus').textContent = `Done — real final val accuracy ${(result.val_accuracy[points-1]*100).toFixed(1)}%.`;
+      }
+    }, 160);
+  }catch(err){
+    btn.disabled = false;
+    document.getElementById('trainStatus').textContent = 'Training request failed — is the backend running?';
+  }
+});
+document.getElementById('resetTrainBtn').addEventListener('click', ()=>{
+  document.getElementById('trainBtn').disabled = false;
+  trainChart.data.labels = []; trainChart.data.datasets[0].data=[]; trainChart.data.datasets[1].data=[];
+  trainChart.update();
+  document.getElementById('trainStatus').textContent = 'Ready.';
+});
+
+/* ---------------------------------------------------------
+   LIVE DEMO — PREDICT
+--------------------------------------------------------- */
+function wireSlider(id, valId, fmt){
+  const s = document.getElementById(id), v = document.getElementById(valId);
+  s.addEventListener('input', ()=> v.textContent = fmt ? fmt(s.value) : s.value);
+}
+wireSlider('ageSlider','ageVal');
+wireSlider('trainHoursSlider','trainHoursVal', v=>(+v).toFixed(1));
+wireSlider('speedSlider','speedVal', v=>(+v).toFixed(2));
+wireSlider('pastInjSlider','pastInjVal');
+
+let gaugeChartInst=null;
+function drawGauge(score){
+  if(gaugeChartInst) gaugeChartInst.destroy();
+  const color = riskColor(score);
+  gaugeChartInst = new Chart(document.getElementById('gaugeChart'), {
+    type:'doughnut',
+    data:{ datasets:[{ data:[score, 100-score], backgroundColor:[color, COLORS.panel], borderWidth:0 }] },
+    options:{ circumference:180, rotation:270, cutout:'75%', plugins:{legend:{display:false}, tooltip:{enabled:false}} }
+  });
+}
+drawGauge(0);
+
+document.getElementById('predictBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('predictBtn');
+  btn.disabled = true;
+  try{
+    const body = {
+      Age: +document.getElementById('ageSlider').value,
+      position: document.getElementById('posSelect').value,
+      Training_Hours_Per_Week: +document.getElementById('trainHoursSlider').value,
+      Sprint_Speed_10m_s: +document.getElementById('speedSlider').value,
+      Previous_Injury_Count: +document.getElementById('pastInjSlider').value
+    };
+    const result = await postJSON('/api/predict', body);
+    drawGauge(result.risk_pct);
+    const valEl = document.getElementById('gaugeVal');
+    valEl.textContent = result.risk_pct + '%';
+    valEl.style.color = riskColor(result.risk_pct);
+    document.getElementById('gaugeSub').textContent = `${riskLabel(result.risk_pct)} risk · ${labelForModel(result.model_used)}`;
+
+    const maxC = Math.max(...result.top_factors.map(f=>f.contribution), 0.0001);
+    document.getElementById('predictFactors').innerHTML = result.top_factors.map(f=>`
+      <div class="factor-row">
+        <div class="factor-label">${f.feature}</div>
+        <div class="factor-bar-bg"><div class="factor-bar" style="width:${(f.contribution/maxC*100).toFixed(0)}%; background:${riskColor(result.risk_pct)};"></div></div>
+        <div class="factor-val">${f.contribution.toFixed(3)}</div>
+      </div>
+    `).join('');
+  }catch(err){
+    document.getElementById('gaugeSub').textContent = 'Prediction failed — is the backend running?';
+  }
+  btn.disabled = false;
+});
+
+/* ---------------------------------------------------------
+   BOOTSTRAP
+--------------------------------------------------------- */
+async function boot(){
+  try{
+    await loadOverview();
+    PLAYERS = await getJSON('/api/players');
+    METRICS = await getJSON('/api/models');
+    document.getElementById('pitchWrap').innerHTML = buildPitch(PLAYERS);
+    renderOverviewImportance(METRICS);
+    renderPlayerTable();
+    renderModelComparison(METRICS);
+    await loadInjuries();
+    setConnected(true);
+  }catch(err){
+    console.error(err);
+    setConnected(false);
+  }
+}
+boot();
+</script>
+</body>
+</html>
