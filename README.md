@@ -133,3 +133,10 @@ most).
 - Deploy: `app.py` runs fine behind `gunicorn app:app` for a real deployment
   (Render, Railway, a university server, etc.) — just don't leave
   `debug=True` on in production.
+
+## 9. Commands For Github
+cd backend
+python3 --version
+pip install -r requirements.txt
+python3 train_models.py
+python3 app.py
