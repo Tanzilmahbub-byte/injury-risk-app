@@ -136,7 +136,12 @@ most).
 
 ## 9. Commands For Github
 cd backend
+
 python3 --version
+
 pip install -r requirements.txt
+
 python3 train_models.py
+
 python3 app.py
+
